@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Modo de Dibujo"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:textColor="#2E7D32"
+        android:layout_marginBottom="16dp" />
+
+    <RadioGroup
+        android:id="@+id/radioGroupDraw"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <RadioButton
+            android:id="@+id/rbDrawNone"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Navegación normal"
+            android:checked="true"/>
+
+        <RadioButton
+            android:id="@+id/rbDrawLine"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Dibujar Línea (Calles/Caminos)"/>
+
+        <RadioButton
+            android:id="@+id/rbDrawPolygon"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Dibujar Polígono (Lotes/Parcelas)"/>
+
+    </RadioGroup>
+
+</LinearLayout>

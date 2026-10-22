@@ -17,12 +17,11 @@ Esta aplicación de Android demuestra cómo **acceder a la ubicación GPS** del 
 
 De acuerdo con el desafío planteado, esta solución utiliza **OpenStreetMap (OSMDroid)** y la **Overpass API**, ofreciendo una alternativa robusta, libre y sin costes de facturación en comparación con Google Maps.
 
-¡Hemos llevado este reto más allá! La temática está **enfocada en el sector agroindustrial**. A través de la aplicación, el usuario puede explorar:
-- 🌱 **Cultivos:** Zonas agrícolas, granjas y huertos.
-- 🏭 **Procesamiento de Alimentos:** Fábricas e instalaciones industriales de grado alimentario.
-- 🏢 **Almacenamiento:** Silos y grandes almacenes.
-
-Permitiendo visualizar un flujo lógico o "recorrido" del sector agroalimentario en la zona geográfica consultada.
+¡Hemos llevado este reto mucho más allá! Pensando en un **Sistema de Información Geográfica (GIS) Agroindustrial**, la aplicación ahora permite:
+- 🌱 **Puntos de Interés Agro:** Buscar cultivos, fábricas de procesamiento y silos dentro de un radio establecido.
+- 🛰️ **Múltiples Capas Satelitales:** Cambiar el mapa base entre el Topográfico de OpenStreetMap, y vistas satelitales de alta resolución de *Esri*, *USGS* y *Microsoft Planetary Computer*.
+- ✍️ **Herramientas de Dibujo:** Capacidad para tocar el mapa y dibujar **Líneas** (para trazar caminos) o **Polígonos** (para delimitar lotes o parcelas agrícolas).
+- 💾 **Gestor Offline Inteligente:** ¿Estás en medio del campo sin señal? No hay problema. Un botón dedicado permite descargar y guardar en la memoria del celular **únicamente la cuadrícula de mapa visible en tu pantalla**, optimizando la memoria y permitiéndote navegar sin internet.
 
 <br/>
 
@@ -81,10 +80,15 @@ Puedes revisar el progreso del desarrollo de los retos anteriores aquí:
 2. **Abrir en Android Studio:** Asegúrate de tener conexión a Internet para que Gradle descargue las dependencias (OSMDroid, Retrofit, Play Services).
 3. **Sincronizar Gradle** y ejecutar el proyecto en un emulador o dispositivo físico.
 4. **Al abrir la app:** 
-   - Concede el permiso de ubicación.
+   - Concede el permiso de ubicación y almacenamiento.
    - El mapa se centrará en tu posición actual.
-   - Usa el **Spinner superior** para filtrar por *Cultivos*, *Procesamiento* o *Almacenamiento*.
-   - Usa el **botón de Ajustes (⚙️)** en la parte superior para deslizar el Slider y elegir un radio de búsqueda entre 1 km y 50 km. 
+   - Usa el **Spinner superior** para buscar Puntos de Interés agroindustriales (Cultivos, Silos, etc).
+   - Usa los **Botones Flotantes (Derecha)** para:
+     - 🗺️ **Capas**: Cambiar a mapa satelital (Microsoft, Esri, USGS).
+     - 💾 **Descargar**: Guardar el mapa de tu pantalla actual para uso Offline.
+     - ✍️ **Dibujar**: Trazar rutas o delimitar polígonos.
+     - 🗑️ **Limpiar**: Borrar los dibujos realizados.
+   - Usa el **botón de Ajustes (⚙️)** superior para cambiar el radio de búsqueda.
 
 *(Nota: En áreas muy urbanizadas o muy rurales extremas, los resultados de la etiqueta `landuse=farmland` pueden variar, depende del mapeo comunitario local de OSM).*
 
