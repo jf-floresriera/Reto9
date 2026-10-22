@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Configurar Radio de Búsqueda"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:textColor="#2E7D32"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:id="@+id/tvRadiusValue"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Radio: 5 km"
+        android:textSize="16sp"
+        android:layout_marginBottom="8dp" />
+
+    <SeekBar
+        android:id="@+id/seekBarRadius"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="50"
+        android:min="1"
+        android:progress="5"
+        android:layout_marginBottom="24dp" />
+
+    <Button
+        android:id="@+id/btnSaveSettings"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Guardar y Buscar"
+        android:backgroundTint="#2E7D32"
+        android:textColor="@android:color/white"/>
+
+</LinearLayout>
