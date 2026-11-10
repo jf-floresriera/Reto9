@@ -12,14 +12,16 @@ import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
-import android.widget.ImageButton
 import android.widget.RadioGroup
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
+import android.view.Menu
+import android.view.MenuItem
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import androidx.core.app.ActivityCompat
 import com.example.reto9.data.OverpassResponse
 import com.example.reto9.data.RetrofitClient
@@ -81,13 +83,18 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         // servidores de teselas de OpenStreetMap rechazan las peticiones (HTTP 403) y el mapa
         // aparece gris/en blanco. Esta era la causa de que "los mapas no se vieran".
         Configuration.getInstance().load(applicationContext, getSharedPreferences("osmdroid", MODE_PRIVATE))
-        Configuration.getInstance().userAgentValue = packageName
+        // User-Agent único y descriptivo. OSM BLOQUEA (403) los que contienen "com.example".
+        // Por eso usamos el applicationId propio (io.github.jfloresriera.reto9) via BuildConfig.
+        Configuration.getInstance().userAgentValue = "Reto9/1.0 (${BuildConfig.APPLICATION_ID})"
         // Usar el almacenamiento interno de la app para la caché de teselas. Evita que el mapa
         // salga gris por problemas de permisos de almacenamiento en algunos dispositivos.
         Configuration.getInstance().osmdroidBasePath = cacheDir
         Configuration.getInstance().osmdroidTileCache = java.io.File(cacheDir, "tiles")
 
         setContentView(R.layout.activity_main)
+
+        // Toolbar Material como barra de acciones (con menú).
+        setSupportActionBar(findViewById<Toolbar>(R.id.toolbar))
 
         prefsManager = PreferencesManager(this)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
@@ -136,10 +143,6 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
                 }
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
-        }
-
-        findViewById<ImageButton>(R.id.btnSettings).setOnClickListener {
-            showSettingsDialog()
         }
 
         findViewById<FloatingActionButton>(R.id.fabLocation).setOnClickListener {
@@ -527,6 +530,26 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
                     Toast.LENGTH_LONG
                 ).show()
             }
+        }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.main_menu, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_search -> {
+                if (currentUserLocation != null) fetchPOIs(currentUserLocation!!)
+                else getCurrentLocation()
+                true
+            }
+            R.id.action_layers -> { showLayersDialog(); true }
+            R.id.action_download -> { downloadCurrentArea(); true }
+            R.id.action_draw -> { showDrawDialog(); true }
+            R.id.action_settings -> { showSettingsDialog(); true }
+            else -> super.onOptionsItemSelected(item)
         }
     }
 

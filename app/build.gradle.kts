@@ -8,7 +8,9 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.reto9"
+        // IMPORTANTE: NO usar "com.example.*". OpenStreetMap bloquea (HTTP 403) los
+        // User-Agent de apps de ejemplo. Debe ser un applicationId único y propio.
+        applicationId = "io.github.jfloresriera.reto9"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
@@ -32,6 +34,9 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+    }
+    buildFeatures {
+        buildConfig = true
     }
 }
 
