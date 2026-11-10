@@ -102,7 +102,7 @@ El APK se genera **automáticamente con GitHub Actions** en cada cambio. No nece
      - 💾 **Descargar**: Guardar el mapa de tu pantalla actual para uso Offline.
      - ✍️ **Dibujar**: Trazar rutas o delimitar polígonos.
      - 🗑️ **Limpiar**: Borrar los dibujos realizados.
-   - Usa el **botón de Ajustes (⚙️)** superior para cambiar el radio de búsqueda.
+   - Usa el **menú superior (⋮)** para: cambiar el **radio** de búsqueda (Ajustes), elegir **tema** (claro / oscuro / automático 🎨), capas, descargar y dibujar.
 
 *(Nota: En áreas muy urbanizadas o muy rurales extremas, los resultados de la etiqueta `landuse=farmland` pueden variar, depende del mapeo comunitario local de OSM).*
 
