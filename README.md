@@ -14,6 +14,19 @@
 
 <hr/>
 
+## 🏙️ Enfoque actual: Bogotá
+
+La app está centrada en la **ciudad de Bogotá, Colombia**. Al abrirla, el mapa se
+posiciona en la **Plaza de Bolívar** mientras obtiene tu ubicación real por GPS, y
+permite buscar puntos de interés urbanos dentro de un radio configurable:
+**hospitales, lugares turísticos, restaurantes, farmacias, escuelas, bancos/cajeros,
+parques y estaciones de bus**.
+
+> Si el GPS no tiene señal, la app muestra automáticamente los puntos de interés del
+> centro de Bogotá para que siempre haya resultados.
+
+<br/>
+
 ## 📖 Descripción del Proyecto
 
 Esta aplicación de Android demuestra cómo **acceder a la ubicación GPS** del dispositivo y presentar en un mapa los **Puntos de Interés (POIs)** cercanos dentro de un radio configurable en kilómetros. 
