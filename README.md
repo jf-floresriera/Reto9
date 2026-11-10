@@ -3,10 +3,13 @@
   <h1>🚜 Reto 9: Accediendo al GPS y Puntos de Interés (Sector Agroindustrial) 🌾</h1>
   <p><strong>Desarrollo de Aplicaciones para Dispositivos Móviles</strong></p>
 
-  [![Kotlin](https://img.shields.io/badge/Kotlin-1.9.0-blue.svg?style=for-the-badge&logo=kotlin)](https://kotlinlang.org)
-  [![Android Studio](https://img.shields.io/badge/Android%20Studio-Jellyfish-green.svg?style=for-the-badge&logo=android-studio)](https://developer.android.com/studio)
+  [![Build APK](https://github.com/jf-floresriera/Reto9/actions/workflows/build-apk.yml/badge.svg)](https://github.com/jf-floresriera/Reto9/actions/workflows/build-apk.yml)
+  [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-blue.svg?style=for-the-badge&logo=kotlin)](https://kotlinlang.org)
+  [![Android](https://img.shields.io/badge/Android-7.0%2B-green.svg?style=for-the-badge&logo=android)](https://developer.android.com)
   [![OSMDroid](https://img.shields.io/badge/Maps-OSMDroid-orange.svg?style=for-the-badge)](https://osmdroid.github.io/osmdroid/)
   [![Overpass](https://img.shields.io/badge/API-Overpass-lightgrey.svg?style=for-the-badge)](https://wiki.openstreetmap.org/wiki/Overpass_API)
+  [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](https://github.com/jf-floresriera/Reto9/pulls)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 </div>
 
 <hr/>
@@ -71,11 +74,22 @@ Puedes revisar el progreso del desarrollo de los retos anteriores aquí:
 
 <br/>
 
+## 📥 Descargar el APK (compilado automáticamente)
+
+El APK se genera **automáticamente con GitHub Actions** en cada cambio. No necesitas compilar nada:
+
+1. Ve a la pestaña **[Actions](https://github.com/jf-floresriera/Reto9/actions)**.
+2. Abre la última ejecución del workflow **Build APK** (la que tiene ✅).
+3. En la sección **Artifacts**, descarga **`reto9-debug-apk`**.
+4. Instálalo en tu teléfono Android (habilita "Instalar apps de orígenes desconocidos").
+
+<br/>
+
 ## 🚀 Instalación y Uso
 
 1. **Clonar el repositorio:**
    ```bash
-   git clone https://github.com/jf-floresriera/Reto9.apk
+   git clone https://github.com/jf-floresriera/Reto9.git
    ```
 2. **Abrir en Android Studio:** Asegúrate de tener conexión a Internet para que Gradle descargue las dependencias (OSMDroid, Retrofit, Play Services).
 3. **Sincronizar Gradle** y ejecutar el proyecto en un emulador o dispositivo físico.

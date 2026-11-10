@@ -2,29 +2,35 @@ package com.example.reto9
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
+import android.location.LocationManager
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
-import android.widget.ImageButton
 import android.widget.RadioGroup
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
+import android.view.Menu
+import android.view.MenuItem
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import androidx.core.app.ActivityCompat
 import com.example.reto9.data.OverpassResponse
 import com.example.reto9.data.RetrofitClient
 import com.example.reto9.utils.MapLayersManager
 import com.example.reto9.utils.PreferencesManager
+import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapEventsReceiver
@@ -35,6 +41,8 @@ import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.Polyline
+import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
+import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -48,7 +56,10 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
     private var currentUserLocation: GeoPoint? = null
     private val permissionCode = 1001
 
-    private val filters = arrayOf("Todos", "Cultivos", "Procesamiento", "Almacenamiento")
+    // Categorías de puntos de interés que pide la tarea.
+    private val filters = arrayOf(
+        "Todos", "Hospitales", "Turístico", "Restaurantes", "Farmacias", "Escuelas"
+    )
 
     // Modos de dibujo
     enum class DrawMode { NONE, LINE, POLYGON }
@@ -61,20 +72,42 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
     // Manejador de cache para offline
     private lateinit var cacheManager: CacheManager
 
+    // Overlay que dibuja el punto azul de "mi ubicación" real y la sigue.
+    private var myLocationOverlay: MyLocationNewOverlay? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Configurar OSMDroid
+        // Configurar OSMDroid.
+        // IMPORTANTE: hay que asignar un User-Agent ANTES de usar el MapView. Sin esto los
+        // servidores de teselas de OpenStreetMap rechazan las peticiones (HTTP 403) y el mapa
+        // aparece gris/en blanco. Esta era la causa de que "los mapas no se vieran".
         Configuration.getInstance().load(applicationContext, getSharedPreferences("osmdroid", MODE_PRIVATE))
-        
+        // User-Agent único y descriptivo. OSM BLOQUEA (403) los que contienen "com.example".
+        // Por eso usamos el applicationId propio (io.github.jfloresriera.reto9) via BuildConfig.
+        Configuration.getInstance().userAgentValue = "Reto9/1.0 (${BuildConfig.APPLICATION_ID})"
+        // Usar el almacenamiento interno de la app para la caché de teselas. Evita que el mapa
+        // salga gris por problemas de permisos de almacenamiento en algunos dispositivos.
+        Configuration.getInstance().osmdroidBasePath = cacheDir
+        Configuration.getInstance().osmdroidTileCache = java.io.File(cacheDir, "tiles")
+
         setContentView(R.layout.activity_main)
+
+        // Toolbar Material como barra de acciones (con menú).
+        setSupportActionBar(findViewById<Toolbar>(R.id.toolbar))
 
         prefsManager = PreferencesManager(this)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
         mapView = findViewById(R.id.mapView)
+        // Fuente de teselas explícita de OpenStreetMap (si no se define, el mapa sale vacío).
+        mapView.setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
         mapView.setMultiTouchControls(true)
+        mapView.setUseDataConnection(true)
         mapView.controller.setZoom(14.0)
+        // Centro inicial válido para que el mapa NO arranque en la coordenada (0,0)
+        // (que cae en el océano) mientras se obtiene la ubicación real del GPS.
+        mapView.controller.setCenter(GeoPoint(-0.22985, -78.52495)) // Quito, Ecuador
 
         // Inicializar CacheManager
         cacheManager = CacheManager(mapView)
@@ -84,7 +117,13 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         mapView.overlays.add(0, mapEventsOverlay) // Agregar al fondo
 
         setupUI()
-        requestPermissions()
+
+        // Si ya tenemos permiso, obtenemos la ubicación directamente; si no, lo solicitamos.
+        if (hasLocationPermission()) {
+            getCurrentLocation()
+        } else {
+            requestPermissions()
+        }
     }
 
     private fun setupUI() {
@@ -106,16 +145,13 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
-        findViewById<ImageButton>(R.id.btnSettings).setOnClickListener {
-            showSettingsDialog()
-        }
-
         findViewById<FloatingActionButton>(R.id.fabLocation).setOnClickListener {
             if (currentUserLocation != null) {
+                mapView.controller.setZoom(15.0)
                 mapView.controller.animateTo(currentUserLocation)
-            } else {
-                requestPermissions()
             }
+            // Siempre vuelve a pedir una lectura fresca del GPS al tocar el botón.
+            getCurrentLocation()
         }
 
         // Botones nuevos
@@ -240,80 +276,150 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         ActivityCompat.requestPermissions(this, permissions, permissionCode)
     }
 
+    private fun hasLocationPermission(): Boolean =
+        ActivityCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED ||
+        ActivityCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+    private fun isGpsEnabled(): Boolean {
+        val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+            lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+    }
+
+    /**
+     * Activa el overlay azul de "mi ubicación" de osmdroid, que lee el GPS directamente
+     * y sigue la posición real del usuario sobre el mapa.
+     */
     @SuppressLint("MissingPermission")
-    private fun getCurrentLocation() {
-        fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
-            if (location != null) {
-                val userPoint = GeoPoint(location.latitude, location.longitude)
-                currentUserLocation = userPoint
-                
-                mapView.controller.setCenter(userPoint)
-
-                // Marcador del usuario
-                val userMarker = Marker(mapView)
-                userMarker.position = userPoint
-                userMarker.title = "Mi Ubicación"
-                userMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                
-                mapView.overlays.add(userMarker)
-                mapView.invalidate()
-
-                fetchPOIs(userPoint)
-            } else {
-                Toast.makeText(this, "No se pudo obtener la ubicación", Toast.LENGTH_SHORT).show()
-            }
+    private fun enableMyLocationOverlay() {
+        if (myLocationOverlay == null) {
+            val overlay = MyLocationNewOverlay(GpsMyLocationProvider(this), mapView)
+            overlay.enableMyLocation()
+            myLocationOverlay = overlay
+            mapView.overlays.add(overlay)
         }
     }
 
+    /**
+     * Obtiene la ubicación REAL y fresca del GPS.
+     *
+     * Antes el código solo usaba lastLocation, que devuelve la última posición en caché
+     * (vieja, de otro lugar, o la ubicación por defecto del emulador = "ubicación ficticia").
+     * Ahora se pide una lectura nueva con getCurrentLocation() y solo se usa lastLocation
+     * como respaldo si la lectura fresca no llega.
+     */
+    @SuppressLint("MissingPermission")
+    private fun getCurrentLocation() {
+        if (!hasLocationPermission()) {
+            requestPermissions()
+            return
+        }
+
+        if (!isGpsEnabled()) {
+            Toast.makeText(
+                this,
+                "Activa la ubicación (GPS) de tu dispositivo para detectar tu posición.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+
+        enableMyLocationOverlay()
+        Toast.makeText(this, "Obteniendo tu ubicación...", Toast.LENGTH_SHORT).show()
+
+        val request = CurrentLocationRequest.Builder()
+            .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+            .setMaxUpdateAgeMillis(0) // 0 = fuerza una lectura nueva, no usa caché
+            .build()
+
+        fusedLocationClient.getCurrentLocation(request, null)
+            .addOnSuccessListener { location: Location? ->
+                if (location != null) {
+                    onLocationReady(location)
+                } else {
+                    // Respaldo: intentar con la última ubicación conocida.
+                    fusedLocationClient.lastLocation.addOnSuccessListener { last ->
+                        if (last != null) {
+                            onLocationReady(last)
+                        } else {
+                            Toast.makeText(
+                                this,
+                                "No se pudo obtener tu ubicación. Verifica que el GPS esté activo y con señal.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }
+            }
+            .addOnFailureListener {
+                Toast.makeText(
+                    this,
+                    "Error al obtener la ubicación: ${it.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+    }
+
+    private fun onLocationReady(location: Location) {
+        val userPoint = GeoPoint(location.latitude, location.longitude)
+        currentUserLocation = userPoint
+
+        mapView.controller.setZoom(15.0)
+        mapView.controller.animateTo(userPoint)
+        mapView.invalidate()
+
+        fetchPOIs(userPoint)
+    }
+
     private fun fetchPOIs(centerPoint: GeoPoint) {
-        // Retener mapa base de eventos y marcadores manuales/dibujos (Polygon/Polyline)
-        mapView.overlays.retainAll { 
-            it is MapEventsOverlay || 
-            it is Polygon || 
-            it is Polyline || 
-            (it is Marker && it.title == "Mi Ubicación") 
+        // Conservar: overlay de eventos (toques), dibujos (Polygon/Polyline) y el overlay azul
+        // de "mi ubicación". Se eliminan solo los marcadores de POIs de la búsqueda anterior.
+        mapView.overlays.retainAll {
+            it is MapEventsOverlay ||
+            it is Polygon ||
+            it is Polyline ||
+            it is MyLocationNewOverlay
         }
 
         val radiusMeters = prefsManager.radiusKm * 1000
         val lat = centerPoint.latitude
         val lon = centerPoint.longitude
 
+        // Construye el filtro Overpass según la categoría elegida. Se consultan nodes, ways y
+        // relations para una determinada etiqueta OSM (key=value) dentro del radio.
+        fun block(key: String, value: String): String = """
+            node["$key"="$value"](around:$radiusMeters,$lat,$lon);
+            way["$key"="$value"](around:$radiusMeters,$lat,$lon);
+            relation["$key"="$value"](around:$radiusMeters,$lat,$lon);
+        """.trimIndent()
+
         val filterQuery = when (prefsManager.filterType) {
-            1 -> """
-                node["landuse"="farmland"](around:$radiusMeters,$lat,$lon);
-                way["landuse"="farmland"](around:$radiusMeters,$lat,$lon);
-                node["landuse"="orchard"](around:$radiusMeters,$lat,$lon);
-                way["landuse"="orchard"](around:$radiusMeters,$lat,$lon);
-            """.trimIndent()
-            2 -> """
-                node["industrial"="food"](around:$radiusMeters,$lat,$lon);
-                way["industrial"="food"](around:$radiusMeters,$lat,$lon);
-                node["industrial"="agricultural"](around:$radiusMeters,$lat,$lon);
-                way["industrial"="agricultural"](around:$radiusMeters,$lat,$lon);
-            """.trimIndent()
-            3 -> """
-                node["man_made"="silo"](around:$radiusMeters,$lat,$lon);
-                way["man_made"="silo"](around:$radiusMeters,$lat,$lon);
-                node["building"="warehouse"](around:$radiusMeters,$lat,$lon);
-                way["building"="warehouse"](around:$radiusMeters,$lat,$lon);
-            """.trimIndent()
-            else -> """
-                node["landuse"="farmland"](around:$radiusMeters,$lat,$lon);
-                way["landuse"="farmland"](around:$radiusMeters,$lat,$lon);
-                node["industrial"="food"](around:$radiusMeters,$lat,$lon);
-                way["industrial"="food"](around:$radiusMeters,$lat,$lon);
-                node["man_made"="silo"](around:$radiusMeters,$lat,$lon);
-                way["man_made"="silo"](around:$radiusMeters,$lat,$lon);
-            """.trimIndent()
+            1 -> block("amenity", "hospital")
+            2 -> block("tourism", "attraction")
+            3 -> block("amenity", "restaurant")
+            4 -> block("amenity", "pharmacy")
+            5 -> block("amenity", "school")
+            else -> listOf(
+                block("amenity", "hospital"),
+                block("tourism", "attraction"),
+                block("amenity", "restaurant"),
+                block("amenity", "pharmacy"),
+                block("amenity", "school")
+            ).joinToString("\n")
         }
 
         val overpassQuery = """
-            [out:json];
+            [out:json][timeout:40];
             (
               $filterQuery
             );
             out center;
         """.trimIndent()
+
+        Toast.makeText(this, "Buscando puntos de interés...", Toast.LENGTH_SHORT).show()
 
         RetrofitClient.instance.getPoi(overpassQuery).enqueue(object : Callback<OverpassResponse> {
             override fun onResponse(call: Call<OverpassResponse>, response: Response<OverpassResponse>) {
@@ -321,21 +427,44 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
                     val elements = response.body()!!.elements
                     if (elements.isNotEmpty()) {
                         for (element in elements) {
+                            // Saltar elementos sin coordenadas válidas.
+                            if (element.latitude == 0.0 && element.longitude == 0.0) continue
                             val poiMarker = Marker(mapView)
                             poiMarker.position = GeoPoint(element.latitude, element.longitude)
-                            poiMarker.title = element.name
-                            poiMarker.snippet = "Tipo: ${element.type} - ID: ${element.id}"
+                            poiMarker.title = element.name   // Nombre del punto de interés (requisito)
+                            poiMarker.snippet = "Tipo: ${element.type}"
                             poiMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                            
                             mapView.overlays.add(poiMarker)
                         }
                         mapView.invalidate()
-                        Toast.makeText(this@MainActivity, "Encontrados: ${elements.size} lugares", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Encontrados: ${elements.size} lugares",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "No se encontraron puntos de interés en el radio configurado.",
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Error del servidor Overpass (${response.code()}).",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
 
-            override fun onFailure(call: Call<OverpassResponse>, t: Throwable) {}
+            override fun onFailure(call: Call<OverpassResponse>, t: Throwable) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Error de red al buscar puntos de interés: ${t.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         })
     }
 
@@ -390,18 +519,51 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == permissionCode) {
-            // Asumimos permisos principales, pero es ideal verificar
-            getCurrentLocation()
+            val fineGranted = grantResults.isNotEmpty() &&
+                grantResults[0] == PackageManager.PERMISSION_GRANTED
+            if (fineGranted) {
+                getCurrentLocation()
+            } else {
+                Toast.makeText(
+                    this,
+                    "Se requiere permiso de ubicación para mostrar el mapa y los puntos de interés.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.main_menu, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_search -> {
+                if (currentUserLocation != null) fetchPOIs(currentUserLocation!!)
+                else getCurrentLocation()
+                true
+            }
+            R.id.action_layers -> { showLayersDialog(); true }
+            R.id.action_download -> { downloadCurrentArea(); true }
+            R.id.action_draw -> { showDrawDialog(); true }
+            R.id.action_settings -> { showSettingsDialog(); true }
+            else -> super.onOptionsItemSelected(item)
         }
     }
 
     override fun onResume() {
         super.onResume()
         mapView.onResume()
+        if (hasLocationPermission()) {
+            myLocationOverlay?.enableMyLocation()
+        }
     }
 
     override fun onPause() {
         super.onPause()
         mapView.onPause()
+        myLocationOverlay?.disableMyLocation()
     }
 }
