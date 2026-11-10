@@ -14,11 +14,12 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Barra superior Material con título y menú -->
-    <com.google.android.material.appbar.AppBarLayout
+    <!-- Columna superior: Toolbar + tarjeta de filtro apiladas verticalmente.
+         Así la tarjeta NUNCA tapa el menú de la toolbar. -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:fitsSystemWindows="true">
+        android:orientation="vertical">
 
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
@@ -28,41 +29,42 @@
             app:logo="@drawable/ic_my_location"
             app:title="@string/app_name"
             app:titleTextColor="@color/on_primary"
+            app:subtitleTextColor="@color/on_primary"
             app:titleCentered="false" />
-    </com.google.android.material.appbar.AppBarLayout>
 
-    <!-- Tarjeta flotante con el selector de categoría -->
-    <com.google.android.material.card.MaterialCardView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="12dp"
-        android:layout_marginTop="72dp"
-        app:cardCornerRadius="14dp"
-        app:cardElevation="6dp">
-
-        <LinearLayout
+        <!-- Tarjeta con el selector de categoría, DEBAJO de la toolbar -->
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="6dp">
+            android:layout_marginHorizontal="12dp"
+            android:layout_marginTop="8dp"
+            app:cardCornerRadius="14dp"
+            app:cardElevation="6dp">
 
-            <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:layout_marginEnd="10dp"
-                android:contentDescription="@string/filter_hint"
-                android:src="@drawable/ic_search"
-                app:tint="@color/primary" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="6dp">
 
-            <Spinner
-                android:id="@+id/spinnerFilter"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1" />
-        </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="10dp"
+                    android:contentDescription="@string/filter_hint"
+                    android:src="@drawable/ic_search"
+                    app:tint="@color/primary" />
+
+                <Spinner
+                    android:id="@+id/spinnerFilter"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </LinearLayout>
 
     <!-- Columna de FABs secundarios (capas, descargar, dibujar, borrar) -->
     <LinearLayout

@@ -114,8 +114,8 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
 
         // Toolbar Material como barra de acciones (con menú).
         setSupportActionBar(findViewById<Toolbar>(R.id.toolbar))
-        // Mostrar la versión en el subtítulo para confirmar que se actualizó la app.
-        supportActionBar?.subtitle = "v${BuildConfig.VERSION_NAME}"
+        // Mostrar la versión en el TÍTULO para confirmar de un vistazo que se actualizó la app.
+        supportActionBar?.title = "Reto 9 · v${BuildConfig.VERSION_NAME}"
 
         // prefsManager ya se inicializó al principio de onCreate (para el tema).
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
@@ -585,14 +585,22 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         api.getPoi(query).enqueue(object : Callback<OverpassResponse> {
             override fun onResponse(call: Call<OverpassResponse>, response: Response<OverpassResponse>) {
                 if (response.isSuccessful && response.body() != null) {
-                    val elements = response.body()!!.elements
+                    val crudos = response.body()!!.elements
+                    val elements = crudos
                         .filter { !(it.latitude == 0.0 && it.longitude == 0.0) }
+                    // DIAGNÓSTICO: cuántos elementos llegaron del servidor (crudos) y
+                    // cuántos quedaron con coordenadas válidas.
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Servidor respondió: ${crudos.size} elementos (válidos: ${elements.size}).",
+                        Toast.LENGTH_LONG
+                    ).show()
                     if (elements.isNotEmpty()) {
                         mostrarPoisAnimados(elements)
                     } else {
                         Toast.makeText(
                             this@MainActivity,
-                            "No se encontraron puntos de interés en el radio configurado.",
+                            "No se encontraron puntos de interés en el radio. Prueba aumentar el radio en Ajustes o elegir 'Todos'.",
                             Toast.LENGTH_LONG
                         ).show()
                     }
