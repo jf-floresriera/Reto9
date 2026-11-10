@@ -44,6 +44,7 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.infowindow.InfoWindow
 import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
@@ -493,9 +494,11 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         val circulo = Polygon(mapView)
         circulo.id = "radio_circulo"
         circulo.points = Polygon.pointsAsCircle(centro, radioMetros)
-        circulo.fillPaint.color = Color.argb(45, Color.red(color), Color.green(color), Color.blue(color))
-        circulo.outlinePaint.color = color
-        circulo.outlinePaint.strokeWidth = 6f
+        // Relleno TRANSPARENTE (antes tapaba todo el mapa de azul) y solo un borde fino.
+        circulo.fillPaint.color = Color.TRANSPARENT
+        circulo.outlinePaint.color = Color.argb(180, Color.red(color), Color.green(color), Color.blue(color))
+        circulo.outlinePaint.strokeWidth = 4f
+        circulo.setOnClickListener { _, _, _ -> false } // no interceptar toques
         // Insertar justo encima del mapa base (debajo de los marcadores).
         mapView.overlays.add(1, circulo)
         mapView.invalidate()
@@ -527,40 +530,40 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
             Toast.LENGTH_LONG
         ).show()
 
-        // 1) Círculo del radio, bien visible.
+        // Cerrar cualquier popup que haya quedado abierto de una búsqueda anterior.
+        InfoWindow.closeAllInfoWindowsOn(mapView)
+
+        // 1) Círculo del radio (solo borde, transparente).
         if (centro != null) dibujarCirculoRadio(centro, color)
 
-        // 2) Zoom-out + zoom-in para que el mapa "reaccione" claramente.
+        // 2) Zoom suave hacia el usuario (sin saltos bruscos).
         if (centro != null) {
             mapView.controller.animateTo(centro)
-            mapView.controller.zoomTo(13.5)
-            handler.postDelayed({ mapView.controller.zoomTo(15.0) }, 450L)
+            mapView.controller.setZoom(15.0)
         }
 
-        // 3) Marcadores con goteo + rebote (empieza el goteo tras el zoom).
-        val inicio = 500L
+        // 3) Marcadores con goteo (aparecen uno a uno).
+        val inicio = 300L
         elements.forEachIndexed { index, element ->
             handler.postDelayed({
                 val punto = GeoPoint(element.latitude, element.longitude)
                 val marker = Marker(mapView)
                 marker.position = punto
-                marker.title = element.name
-                marker.snippet = "Tipo: ${element.type}"
+                val nombre = if (element.name.isNotBlank() && element.name != "null"
+                    && element.name != "Desconocido") element.name else "Sin nombre"
+                marker.title = nombre
+                marker.snippet = filters[prefsManager.filterType]
                 marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                // IMPORTANTE: se crea a TAMAÑO COMPLETO para que SIEMPRE sea visible,
-                // aunque la animación de rebote no llegue a ejecutarse.
                 marker.icon = iconoMarcadorColoreado(color, 1.0f)
+                // No abrir el popup automáticamente (antes aparecían flotando solos).
+                marker.setOnMarkerClickListener { m, _ ->
+                    InfoWindow.closeAllInfoWindowsOn(mapView)
+                    m.showInfoWindow()
+                    mapView.controller.animateTo(m.position)
+                    true
+                }
                 mapView.overlays.add(marker)
                 mapView.invalidate()
-
-                // Rebote (extra visual): parte un poco pequeño y "salta".
-                val escalas = floatArrayOf(0.6f, 1.3f, 1.15f, 1.0f)
-                escalas.forEachIndexed { paso, scale ->
-                    handler.postDelayed({
-                        marker.icon = iconoMarcadorColoreado(color, scale)
-                        mapView.invalidate()
-                    }, 70L * (paso + 1))
-                }
             }, inicio + 120L * index) // 120ms entre puntos -> goteo visible
         }
 
