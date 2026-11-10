@@ -48,7 +48,10 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
     private var currentUserLocation: GeoPoint? = null
     private val permissionCode = 1001
 
-    private val filters = arrayOf("Todos", "Cultivos", "Procesamiento", "Almacenamiento")
+    // Categorías de puntos de interés que pide la tarea.
+    private val filters = arrayOf(
+        "Todos", "Hospitales", "Turístico", "Restaurantes", "Farmacias", "Escuelas"
+    )
 
     // Modos de dibujo
     enum class DrawMode { NONE, LINE, POLYGON }
@@ -64,9 +67,13 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Configurar OSMDroid
+        // Configurar OSMDroid.
+        // IMPORTANTE: hay que asignar un User-Agent ANTES de usar el MapView. Sin esto los
+        // servidores de teselas de OpenStreetMap rechazan las peticiones (HTTP 403) y el mapa
+        // aparece gris/en blanco. Esta era la causa de que "los mapas no se vieran".
         Configuration.getInstance().load(applicationContext, getSharedPreferences("osmdroid", MODE_PRIVATE))
-        
+        Configuration.getInstance().userAgentValue = packageName
+
         setContentView(R.layout.activity_main)
 
         prefsManager = PreferencesManager(this)
@@ -278,42 +285,38 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         val lat = centerPoint.latitude
         val lon = centerPoint.longitude
 
+        // Construye el filtro Overpass según la categoría elegida. Se consultan nodes, ways y
+        // relations para una determinada etiqueta OSM (key=value) dentro del radio.
+        fun block(key: String, value: String): String = """
+            node["$key"="$value"](around:$radiusMeters,$lat,$lon);
+            way["$key"="$value"](around:$radiusMeters,$lat,$lon);
+            relation["$key"="$value"](around:$radiusMeters,$lat,$lon);
+        """.trimIndent()
+
         val filterQuery = when (prefsManager.filterType) {
-            1 -> """
-                node["landuse"="farmland"](around:$radiusMeters,$lat,$lon);
-                way["landuse"="farmland"](around:$radiusMeters,$lat,$lon);
-                node["landuse"="orchard"](around:$radiusMeters,$lat,$lon);
-                way["landuse"="orchard"](around:$radiusMeters,$lat,$lon);
-            """.trimIndent()
-            2 -> """
-                node["industrial"="food"](around:$radiusMeters,$lat,$lon);
-                way["industrial"="food"](around:$radiusMeters,$lat,$lon);
-                node["industrial"="agricultural"](around:$radiusMeters,$lat,$lon);
-                way["industrial"="agricultural"](around:$radiusMeters,$lat,$lon);
-            """.trimIndent()
-            3 -> """
-                node["man_made"="silo"](around:$radiusMeters,$lat,$lon);
-                way["man_made"="silo"](around:$radiusMeters,$lat,$lon);
-                node["building"="warehouse"](around:$radiusMeters,$lat,$lon);
-                way["building"="warehouse"](around:$radiusMeters,$lat,$lon);
-            """.trimIndent()
-            else -> """
-                node["landuse"="farmland"](around:$radiusMeters,$lat,$lon);
-                way["landuse"="farmland"](around:$radiusMeters,$lat,$lon);
-                node["industrial"="food"](around:$radiusMeters,$lat,$lon);
-                way["industrial"="food"](around:$radiusMeters,$lat,$lon);
-                node["man_made"="silo"](around:$radiusMeters,$lat,$lon);
-                way["man_made"="silo"](around:$radiusMeters,$lat,$lon);
-            """.trimIndent()
+            1 -> block("amenity", "hospital")
+            2 -> block("tourism", "attraction")
+            3 -> block("amenity", "restaurant")
+            4 -> block("amenity", "pharmacy")
+            5 -> block("amenity", "school")
+            else -> listOf(
+                block("amenity", "hospital"),
+                block("tourism", "attraction"),
+                block("amenity", "restaurant"),
+                block("amenity", "pharmacy"),
+                block("amenity", "school")
+            ).joinToString("\n")
         }
 
         val overpassQuery = """
-            [out:json];
+            [out:json][timeout:40];
             (
               $filterQuery
             );
             out center;
         """.trimIndent()
+
+        Toast.makeText(this, "Buscando puntos de interés...", Toast.LENGTH_SHORT).show()
 
         RetrofitClient.instance.getPoi(overpassQuery).enqueue(object : Callback<OverpassResponse> {
             override fun onResponse(call: Call<OverpassResponse>, response: Response<OverpassResponse>) {
@@ -321,21 +324,44 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
                     val elements = response.body()!!.elements
                     if (elements.isNotEmpty()) {
                         for (element in elements) {
+                            // Saltar elementos sin coordenadas válidas.
+                            if (element.latitude == 0.0 && element.longitude == 0.0) continue
                             val poiMarker = Marker(mapView)
                             poiMarker.position = GeoPoint(element.latitude, element.longitude)
-                            poiMarker.title = element.name
-                            poiMarker.snippet = "Tipo: ${element.type} - ID: ${element.id}"
+                            poiMarker.title = element.name   // Nombre del punto de interés (requisito)
+                            poiMarker.snippet = "Tipo: ${element.type}"
                             poiMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                            
                             mapView.overlays.add(poiMarker)
                         }
                         mapView.invalidate()
-                        Toast.makeText(this@MainActivity, "Encontrados: ${elements.size} lugares", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Encontrados: ${elements.size} lugares",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "No se encontraron puntos de interés en el radio configurado.",
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Error del servidor Overpass (${response.code()}).",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
 
-            override fun onFailure(call: Call<OverpassResponse>, t: Throwable) {}
+            override fun onFailure(call: Call<OverpassResponse>, t: Throwable) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Error de red al buscar puntos de interés: ${t.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         })
     }
 
@@ -390,8 +416,17 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == permissionCode) {
-            // Asumimos permisos principales, pero es ideal verificar
-            getCurrentLocation()
+            val fineGranted = grantResults.isNotEmpty() &&
+                grantResults[0] == PackageManager.PERMISSION_GRANTED
+            if (fineGranted) {
+                getCurrentLocation()
+            } else {
+                Toast.makeText(
+                    this,
+                    "Se requiere permiso de ubicación para mostrar el mapa y los puntos de interés.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
 
