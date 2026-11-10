@@ -58,9 +58,10 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
     // Centro de Bogotá (Plaza de Bolívar), usado como respaldo si el GPS no responde.
     private val bogotaCenter = GeoPoint(4.5981, -74.0758)
 
-    // Categorías de puntos de interés que pide la tarea.
+    // Categorías de puntos de interés (útiles en una ciudad como Bogotá).
     private val filters = arrayOf(
-        "Todos", "Hospitales", "Turístico", "Restaurantes", "Farmacias", "Escuelas"
+        "Todos", "Hospitales", "Turístico", "Restaurantes", "Farmacias",
+        "Escuelas", "Bancos / Cajeros", "Parques", "Estaciones de bus"
     )
 
     // Modos de dibujo
@@ -409,12 +410,17 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
             3 -> block("amenity", "restaurant")
             4 -> block("amenity", "pharmacy")
             5 -> block("amenity", "school")
+            6 -> block("amenity", "bank") + "\n" + block("amenity", "atm")
+            7 -> block("leisure", "park")
+            8 -> block("highway", "bus_stop") + "\n" + block("amenity", "bus_station")
             else -> listOf(
                 block("amenity", "hospital"),
                 block("tourism", "attraction"),
                 block("amenity", "restaurant"),
                 block("amenity", "pharmacy"),
-                block("amenity", "school")
+                block("amenity", "school"),
+                block("amenity", "bank"),
+                block("leisure", "park")
             ).joinToString("\n")
         }
 
