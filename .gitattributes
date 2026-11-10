@@ -1,0 +1,15 @@
+# Normaliza los finales de línea automáticamente
+* text=auto eol=lf
+
+# Scripts de Windows con CRLF
+*.bat text eol=crlf
+
+# Archivos binarios (no diffear ni normalizar)
+*.jar binary
+*.apk binary
+*.png binary
+*.webp binary
+*.jpg binary
+
+# Lenguaje principal del repo (para las estadísticas de GitHub)
+*.kt linguist-language=Kotlin
