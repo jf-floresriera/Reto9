@@ -6,7 +6,14 @@
     <string name="action_layers">Capas del mapa</string>
     <string name="action_download">Descargar área (offline)</string>
     <string name="action_draw">Dibujar</string>
+    <string name="action_theme">Cambiar tema</string>
     <string name="action_settings">Ajustes</string>
+
+    <!-- Temas -->
+    <string name="theme_dialog_title">Elegir tema</string>
+    <string name="theme_system">Automático (sistema)</string>
+    <string name="theme_light">Claro</string>
+    <string name="theme_dark">Oscuro</string>
 
     <!-- Botones flotantes -->
     <string name="fab_locate">Mi ubicación</string>

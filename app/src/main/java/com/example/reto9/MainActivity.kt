@@ -27,6 +27,7 @@ import com.example.reto9.data.OverpassResponse
 import com.example.reto9.data.RetrofitClient
 import com.example.reto9.utils.MapLayersManager
 import com.example.reto9.utils.PreferencesManager
+import com.example.reto9.utils.ThemeManager
 import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
@@ -76,6 +77,10 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
     private var myLocationOverlay: MyLocationNewOverlay? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Aplicar el tema guardado (claro/oscuro/sistema) ANTES de crear la vista.
+        prefsManager = PreferencesManager(this)
+        ThemeManager.apply(prefsManager.themeMode)
+
         super.onCreate(savedInstanceState)
         
         // Configurar OSMDroid.
@@ -96,7 +101,7 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         // Toolbar Material como barra de acciones (con menú).
         setSupportActionBar(findViewById<Toolbar>(R.id.toolbar))
 
-        prefsManager = PreferencesManager(this)
+        // prefsManager ya se inicializó al principio de onCreate (para el tema).
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
         mapView = findViewById(R.id.mapView)
@@ -533,6 +538,28 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         }
     }
 
+    /**
+     * Diálogo para elegir el tema (claro / oscuro / automático). Guarda la elección
+     * y la aplica inmediatamente recreando la actividad.
+     */
+    private fun showThemeDialog() {
+        val opciones = arrayOf(
+            getString(R.string.theme_system),
+            getString(R.string.theme_light),
+            getString(R.string.theme_dark)
+        )
+        AlertDialog.Builder(this)
+            .setTitle(R.string.theme_dialog_title)
+            .setSingleChoiceItems(opciones, prefsManager.themeMode) { dialog, which ->
+                prefsManager.themeMode = which
+                ThemeManager.apply(which)
+                dialog.dismiss()
+                recreate() // aplica el tema al instante
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
         return true
@@ -548,6 +575,7 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
             R.id.action_layers -> { showLayersDialog(); true }
             R.id.action_download -> { downloadCurrentArea(); true }
             R.id.action_draw -> { showDrawDialog(); true }
+            R.id.action_theme -> { showThemeDialog(); true }
             R.id.action_settings -> { showSettingsDialog(); true }
             else -> super.onOptionsItemSelected(item)
         }
