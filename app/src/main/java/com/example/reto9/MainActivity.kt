@@ -2,8 +2,10 @@ package com.example.reto9
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
+import android.location.LocationManager
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -23,8 +25,10 @@ import com.example.reto9.data.OverpassResponse
 import com.example.reto9.data.RetrofitClient
 import com.example.reto9.utils.MapLayersManager
 import com.example.reto9.utils.PreferencesManager
+import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapEventsReceiver
@@ -35,6 +39,8 @@ import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.Polyline
+import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
+import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -64,6 +70,9 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
     // Manejador de cache para offline
     private lateinit var cacheManager: CacheManager
 
+    // Overlay que dibuja el punto azul de "mi ubicación" real y la sigue.
+    private var myLocationOverlay: MyLocationNewOverlay? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -73,6 +82,10 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         // aparece gris/en blanco. Esta era la causa de que "los mapas no se vieran".
         Configuration.getInstance().load(applicationContext, getSharedPreferences("osmdroid", MODE_PRIVATE))
         Configuration.getInstance().userAgentValue = packageName
+        // Usar el almacenamiento interno de la app para la caché de teselas. Evita que el mapa
+        // salga gris por problemas de permisos de almacenamiento en algunos dispositivos.
+        Configuration.getInstance().osmdroidBasePath = cacheDir
+        Configuration.getInstance().osmdroidTileCache = java.io.File(cacheDir, "tiles")
 
         setContentView(R.layout.activity_main)
 
@@ -80,8 +93,14 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
         mapView = findViewById(R.id.mapView)
+        // Fuente de teselas explícita de OpenStreetMap (si no se define, el mapa sale vacío).
+        mapView.setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
         mapView.setMultiTouchControls(true)
+        mapView.setUseDataConnection(true)
         mapView.controller.setZoom(14.0)
+        // Centro inicial válido para que el mapa NO arranque en la coordenada (0,0)
+        // (que cae en el océano) mientras se obtiene la ubicación real del GPS.
+        mapView.controller.setCenter(GeoPoint(-0.22985, -78.52495)) // Quito, Ecuador
 
         // Inicializar CacheManager
         cacheManager = CacheManager(mapView)
@@ -91,7 +110,13 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         mapView.overlays.add(0, mapEventsOverlay) // Agregar al fondo
 
         setupUI()
-        requestPermissions()
+
+        // Si ya tenemos permiso, obtenemos la ubicación directamente; si no, lo solicitamos.
+        if (hasLocationPermission()) {
+            getCurrentLocation()
+        } else {
+            requestPermissions()
+        }
     }
 
     private fun setupUI() {
@@ -119,10 +144,11 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
 
         findViewById<FloatingActionButton>(R.id.fabLocation).setOnClickListener {
             if (currentUserLocation != null) {
+                mapView.controller.setZoom(15.0)
                 mapView.controller.animateTo(currentUserLocation)
-            } else {
-                requestPermissions()
             }
+            // Siempre vuelve a pedir una lectura fresca del GPS al tocar el botón.
+            getCurrentLocation()
         }
 
         // Botones nuevos
@@ -247,38 +273,112 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         ActivityCompat.requestPermissions(this, permissions, permissionCode)
     }
 
+    private fun hasLocationPermission(): Boolean =
+        ActivityCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED ||
+        ActivityCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+    private fun isGpsEnabled(): Boolean {
+        val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+            lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+    }
+
+    /**
+     * Activa el overlay azul de "mi ubicación" de osmdroid, que lee el GPS directamente
+     * y sigue la posición real del usuario sobre el mapa.
+     */
     @SuppressLint("MissingPermission")
-    private fun getCurrentLocation() {
-        fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
-            if (location != null) {
-                val userPoint = GeoPoint(location.latitude, location.longitude)
-                currentUserLocation = userPoint
-                
-                mapView.controller.setCenter(userPoint)
-
-                // Marcador del usuario
-                val userMarker = Marker(mapView)
-                userMarker.position = userPoint
-                userMarker.title = "Mi Ubicación"
-                userMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                
-                mapView.overlays.add(userMarker)
-                mapView.invalidate()
-
-                fetchPOIs(userPoint)
-            } else {
-                Toast.makeText(this, "No se pudo obtener la ubicación", Toast.LENGTH_SHORT).show()
-            }
+    private fun enableMyLocationOverlay() {
+        if (myLocationOverlay == null) {
+            val overlay = MyLocationNewOverlay(GpsMyLocationProvider(this), mapView)
+            overlay.enableMyLocation()
+            myLocationOverlay = overlay
+            mapView.overlays.add(overlay)
         }
     }
 
+    /**
+     * Obtiene la ubicación REAL y fresca del GPS.
+     *
+     * Antes el código solo usaba lastLocation, que devuelve la última posición en caché
+     * (vieja, de otro lugar, o la ubicación por defecto del emulador = "ubicación ficticia").
+     * Ahora se pide una lectura nueva con getCurrentLocation() y solo se usa lastLocation
+     * como respaldo si la lectura fresca no llega.
+     */
+    @SuppressLint("MissingPermission")
+    private fun getCurrentLocation() {
+        if (!hasLocationPermission()) {
+            requestPermissions()
+            return
+        }
+
+        if (!isGpsEnabled()) {
+            Toast.makeText(
+                this,
+                "Activa la ubicación (GPS) de tu dispositivo para detectar tu posición.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+
+        enableMyLocationOverlay()
+        Toast.makeText(this, "Obteniendo tu ubicación...", Toast.LENGTH_SHORT).show()
+
+        val request = CurrentLocationRequest.Builder()
+            .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+            .setMaxUpdateAgeMillis(0) // 0 = fuerza una lectura nueva, no usa caché
+            .build()
+
+        fusedLocationClient.getCurrentLocation(request, null)
+            .addOnSuccessListener { location: Location? ->
+                if (location != null) {
+                    onLocationReady(location)
+                } else {
+                    // Respaldo: intentar con la última ubicación conocida.
+                    fusedLocationClient.lastLocation.addOnSuccessListener { last ->
+                        if (last != null) {
+                            onLocationReady(last)
+                        } else {
+                            Toast.makeText(
+                                this,
+                                "No se pudo obtener tu ubicación. Verifica que el GPS esté activo y con señal.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }
+            }
+            .addOnFailureListener {
+                Toast.makeText(
+                    this,
+                    "Error al obtener la ubicación: ${it.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+    }
+
+    private fun onLocationReady(location: Location) {
+        val userPoint = GeoPoint(location.latitude, location.longitude)
+        currentUserLocation = userPoint
+
+        mapView.controller.setZoom(15.0)
+        mapView.controller.animateTo(userPoint)
+        mapView.invalidate()
+
+        fetchPOIs(userPoint)
+    }
+
     private fun fetchPOIs(centerPoint: GeoPoint) {
-        // Retener mapa base de eventos y marcadores manuales/dibujos (Polygon/Polyline)
-        mapView.overlays.retainAll { 
-            it is MapEventsOverlay || 
-            it is Polygon || 
-            it is Polyline || 
-            (it is Marker && it.title == "Mi Ubicación") 
+        // Conservar: overlay de eventos (toques), dibujos (Polygon/Polyline) y el overlay azul
+        // de "mi ubicación". Se eliminan solo los marcadores de POIs de la búsqueda anterior.
+        mapView.overlays.retainAll {
+            it is MapEventsOverlay ||
+            it is Polygon ||
+            it is Polyline ||
+            it is MyLocationNewOverlay
         }
 
         val radiusMeters = prefsManager.radiusKm * 1000
@@ -433,10 +533,14 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
     override fun onResume() {
         super.onResume()
         mapView.onResume()
+        if (hasLocationPermission()) {
+            myLocationOverlay?.enableMyLocation()
+        }
     }
 
     override fun onPause() {
         super.onPause()
         mapView.onPause()
+        myLocationOverlay?.disableMyLocation()
     }
 }
