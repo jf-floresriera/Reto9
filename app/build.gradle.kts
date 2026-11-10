@@ -54,6 +54,8 @@ dependencies {
     // Retrofit y Gson para API de Overpass
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    // OkHttp (timeouts y User-Agent para Overpass)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)

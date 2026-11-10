@@ -433,27 +433,46 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         """.trimIndent()
 
         Toast.makeText(this, "Buscando puntos de interés...", Toast.LENGTH_SHORT).show()
+        ejecutarConsulta(overpassQuery, 0)
+    }
 
-        RetrofitClient.instance.getPoi(overpassQuery).enqueue(object : Callback<OverpassResponse> {
+    /**
+     * Ejecuta la consulta Overpass contra el servidor [serverIndex]. Si ese servidor
+     * falla (timeout / sin conexión), REINTENTA automáticamente con el siguiente de la
+     * lista. Así evitamos el "Failed to connect" cuando un servidor público está saturado.
+     */
+    private fun ejecutarConsulta(query: String, serverIndex: Int) {
+        if (serverIndex >= RetrofitClient.servers.size) {
+            Toast.makeText(
+                this,
+                "No se pudo conectar con ningún servidor de puntos de interés. Revisa tu conexión e inténtalo de nuevo.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+
+        val api = RetrofitClient.apiFor(RetrofitClient.servers[serverIndex])
+        api.getPoi(query).enqueue(object : Callback<OverpassResponse> {
             override fun onResponse(call: Call<OverpassResponse>, response: Response<OverpassResponse>) {
                 if (response.isSuccessful && response.body() != null) {
                     val elements = response.body()!!.elements
                     if (elements.isNotEmpty()) {
+                        var contador = 0
                         for (element in elements) {
-                            // Saltar elementos sin coordenadas válidas.
                             if (element.latitude == 0.0 && element.longitude == 0.0) continue
                             val poiMarker = Marker(mapView)
                             poiMarker.position = GeoPoint(element.latitude, element.longitude)
-                            poiMarker.title = element.name   // Nombre del punto de interés (requisito)
+                            poiMarker.title = element.name
                             poiMarker.snippet = "Tipo: ${element.type}"
                             poiMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                             mapView.overlays.add(poiMarker)
+                            contador++
                         }
                         mapView.invalidate()
                         Toast.makeText(
                             this@MainActivity,
-                            "Encontrados: ${elements.size} lugares",
-                            Toast.LENGTH_SHORT
+                            "Se encontraron $contador puntos de interés cerca.",
+                            Toast.LENGTH_LONG
                         ).show()
                     } else {
                         Toast.makeText(
@@ -463,20 +482,14 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
                         ).show()
                     }
                 } else {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Error del servidor Overpass (${response.code()}).",
-                        Toast.LENGTH_LONG
-                    ).show()
+                    // El servidor respondió con error: probar el siguiente.
+                    ejecutarConsulta(query, serverIndex + 1)
                 }
             }
 
             override fun onFailure(call: Call<OverpassResponse>, t: Throwable) {
-                Toast.makeText(
-                    this@MainActivity,
-                    "Error de red al buscar puntos de interés: ${t.message}",
-                    Toast.LENGTH_LONG
-                ).show()
+                // No se pudo conectar: probar automáticamente el siguiente servidor.
+                ejecutarConsulta(query, serverIndex + 1)
             }
         })
     }
