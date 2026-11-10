@@ -476,54 +476,78 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         return wrapped
     }
 
+    /** Dibuja un círculo de color que representa el radio de búsqueda alrededor del centro. */
+    private fun dibujarCirculoRadio(centro: GeoPoint, color: Int) {
+        // Quitar círculo anterior.
+        mapView.overlays.removeAll { it is Polygon && it.id == "radio_circulo" }
+
+        val radioMetros = (prefsManager.radiusKm * 1000).toDouble()
+        val circulo = Polygon(mapView)
+        circulo.id = "radio_circulo"
+        circulo.points = Polygon.pointsAsCircle(centro, radioMetros)
+        circulo.fillPaint.color = Color.argb(45, Color.red(color), Color.green(color), Color.blue(color))
+        circulo.outlinePaint.color = color
+        circulo.outlinePaint.strokeWidth = 6f
+        // Insertar justo encima del mapa base (debajo de los marcadores).
+        mapView.overlays.add(1, circulo)
+        mapView.invalidate()
+    }
+
     /**
-     * Dibuja los puntos de interés de forma DINÁMICA: aparecen uno a uno con un pequeño
-     * retraso (efecto escalonado) y cada pin "crece" con una mini animación. Al terminar,
-     * el mapa hace un zoom animado para encuadrar los resultados.
+     * Dibuja los puntos de interés de forma MUY VISIBLE y dinámica:
+     * 1) Dibuja un círculo de color = el radio de búsqueda alrededor de ti.
+     * 2) Hace un zoom-out y luego zoom-in animado para que el cambio se note.
+     * 3) Los marcadores aparecen uno a uno (goteo) y cada pin REBOTA (crece de golpe
+     *    y se asienta), con una animación amplia y perceptible.
      */
     private fun mostrarPoisAnimados(elements: List<com.example.reto9.data.OverpassElement>) {
         val color = colorPorCategoria()
         val handler = Handler(Looper.getMainLooper())
-        val puntos = mutableListOf<GeoPoint>()
+        val centro = currentUserLocation
 
+        // 1) Círculo del radio, bien visible.
+        if (centro != null) dibujarCirculoRadio(centro, color)
+
+        // 2) Zoom-out + zoom-in para que el mapa "reaccione" claramente.
+        if (centro != null) {
+            mapView.controller.animateTo(centro)
+            mapView.controller.zoomTo(13.5)
+            handler.postDelayed({ mapView.controller.zoomTo(15.0) }, 450L)
+        }
+
+        // 3) Marcadores con goteo + rebote (empieza el goteo tras el zoom).
+        val inicio = 500L
         elements.forEachIndexed { index, element ->
-            // Cada marcador aparece con un pequeño retraso -> sensación de animación.
             handler.postDelayed({
                 val punto = GeoPoint(element.latitude, element.longitude)
-                puntos.add(punto)
-
                 val marker = Marker(mapView)
                 marker.position = punto
                 marker.title = element.name
                 marker.snippet = "Tipo: ${element.type}"
                 marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                marker.icon = iconoMarcadorColoreado(color, 0.5f) // empieza pequeño
+                marker.icon = iconoMarcadorColoreado(color, 0.2f) // casi invisible al inicio
                 mapView.overlays.add(marker)
                 mapView.invalidate()
 
-                // Animación de "crecer": el pin pasa de 0.5x a 1.0x en ~180 ms.
-                val pasos = 6
-                for (p in 1..pasos) {
+                // Rebote amplio: 0.2x -> 1.3x -> 1.0x (se ve "saltar").
+                val escalas = floatArrayOf(0.2f, 0.6f, 1.0f, 1.3f, 1.15f, 1.0f)
+                escalas.forEachIndexed { paso, scale ->
                     handler.postDelayed({
-                        val scale = 0.5f + 0.5f * (p / pasos.toFloat())
                         marker.icon = iconoMarcadorColoreado(color, scale)
                         mapView.invalidate()
-                    }, 30L * p)
+                    }, 70L * (paso + 1))
                 }
-            }, 40L * index)
+            }, inicio + 120L * index) // 120ms entre puntos -> goteo visible
         }
 
-        // Al terminar de colocar todos, encuadrar la zona con zoom animado.
+        // Mensaje final con el conteo.
         handler.postDelayed({
             Toast.makeText(
                 this,
                 "Se encontraron ${elements.size} puntos de interés cerca.",
                 Toast.LENGTH_LONG
             ).show()
-            currentUserLocation?.let {
-                mapView.controller.animateTo(it)
-            }
-        }, 40L * elements.size + 250L)
+        }, inicio + 120L * elements.size + 300L)
     }
 
     /**
