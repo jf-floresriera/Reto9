@@ -110,7 +110,8 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         mapView.controller.setZoom(14.0)
         // Centro inicial válido para que el mapa NO arranque en la coordenada (0,0)
         // (que cae en el océano) mientras se obtiene la ubicación real del GPS.
-        mapView.controller.setCenter(GeoPoint(-0.22985, -78.52495)) // Quito, Ecuador
+        // Plaza de Bolívar, Bogotá, Colombia.
+        mapView.controller.setCenter(GeoPoint(4.5981, -74.0758)) // Bogotá, Colombia
 
         // Inicializar CacheManager
         cacheManager = CacheManager(mapView)
