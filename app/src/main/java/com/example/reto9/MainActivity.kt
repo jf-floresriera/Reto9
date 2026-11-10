@@ -55,6 +55,9 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
     private var currentUserLocation: GeoPoint? = null
     private val permissionCode = 1001
 
+    // Centro de Bogotá (Plaza de Bolívar), usado como respaldo si el GPS no responde.
+    private val bogotaCenter = GeoPoint(4.5981, -74.0758)
+
     // Categorías de puntos de interés que pide la tarea.
     private val filters = arrayOf(
         "Todos", "Hospitales", "Turístico", "Restaurantes", "Farmacias", "Escuelas"
@@ -337,16 +340,22 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
                 if (location != null) {
                     onLocationReady(location)
                 } else {
-                    // Respaldo: intentar con la última ubicación conocida.
+                    // Respaldo 1: intentar con la última ubicación conocida.
                     fusedLocationClient.lastLocation.addOnSuccessListener { last ->
                         if (last != null) {
                             onLocationReady(last)
                         } else {
+                            // Respaldo 2: usar el centro de Bogotá para que la app
+                            // siempre muestre puntos de interés aunque no haya GPS.
                             Toast.makeText(
                                 this,
-                                "No se pudo obtener tu ubicación. Verifica que el GPS esté activo y con señal.",
+                                "Sin señal GPS: mostrando puntos de interés en el centro de Bogotá.",
                                 Toast.LENGTH_LONG
                             ).show()
+                            currentUserLocation = bogotaCenter
+                            mapView.controller.setZoom(15.0)
+                            mapView.controller.animateTo(bogotaCenter)
+                            fetchPOIs(bogotaCenter)
                         }
                     }
                 }
