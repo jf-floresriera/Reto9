@@ -13,8 +13,10 @@ android {
         applicationId = "io.github.jfloresriera.reto9"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // Subir versionCode en CADA versión: si no, Android puede NO reinstalar la
+        // actualización y te quedas viendo la app vieja (bug reportado por el usuario).
+        versionCode = 7
+        versionName = "1.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
