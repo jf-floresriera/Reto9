@@ -11,9 +11,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
-import android.widget.Button
 import android.widget.RadioGroup
-import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.view.Menu
@@ -240,29 +238,23 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
 
     private fun showSettingsDialog() {
         val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_settings, null)
-        val seekBarRadius = dialogView.findViewById<SeekBar>(R.id.seekBarRadius)
+        val slider = dialogView.findViewById<com.google.android.material.slider.Slider>(R.id.sliderRadius)
         val tvRadiusValue = dialogView.findViewById<TextView>(R.id.tvRadiusValue)
-        val btnSave = dialogView.findViewById<Button>(R.id.btnSaveSettings)
+        val btnSave = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSaveSettings)
 
-        seekBarRadius.progress = prefsManager.radiusKm
+        slider.value = prefsManager.radiusKm.toFloat().coerceIn(1f, 50f)
         tvRadiusValue.text = "Radio: ${prefsManager.radiusKm} km"
 
-        seekBarRadius.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                val actualProgress = if (progress == 0) 1 else progress
-                tvRadiusValue.text = "Radio: $actualProgress km"
-            }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-        })
+        slider.addOnChangeListener { _, value, _ ->
+            tvRadiusValue.text = "Radio: ${value.toInt()} km"
+        }
 
         val dialog = AlertDialog.Builder(this)
             .setView(dialogView)
             .create()
 
         btnSave.setOnClickListener {
-            val finalRadius = if (seekBarRadius.progress == 0) 1 else seekBarRadius.progress
-            prefsManager.radiusKm = finalRadius
+            prefsManager.radiusKm = slider.value.toInt()
             dialog.dismiss()
             if (currentUserLocation != null) {
                 fetchPOIs(currentUserLocation!!)
