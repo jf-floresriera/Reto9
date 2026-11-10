@@ -413,31 +413,31 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         val lon = centerPoint.longitude
 
         // Construye el filtro Overpass según la categoría elegida. Se consultan nodes, ways y
-        // relations para una determinada etiqueta OSM (key=value) dentro del radio.
+        // relations para una o VARIAS etiquetas OSM (key=value) dentro del radio.
+        // Usar varias etiquetas por categoría es clave: en OSM una farmacia puede estar
+        // mapeada como amenity=pharmacy, healthcare=pharmacy o shop=chemist.
         fun block(key: String, value: String): String = """
             node["$key"="$value"](around:$radiusMeters,$lat,$lon);
             way["$key"="$value"](around:$radiusMeters,$lat,$lon);
             relation["$key"="$value"](around:$radiusMeters,$lat,$lon);
         """.trimIndent()
 
+        fun blocks(vararg pares: Pair<String, String>): String =
+            pares.joinToString("\n") { block(it.first, it.second) }
+
         val filterQuery = when (prefsManager.filterType) {
-            1 -> block("amenity", "hospital")
-            2 -> block("tourism", "attraction")
-            3 -> block("amenity", "restaurant")
-            4 -> block("amenity", "pharmacy")
-            5 -> block("amenity", "school")
-            6 -> block("amenity", "bank") + "\n" + block("amenity", "atm")
-            7 -> block("leisure", "park")
-            8 -> block("highway", "bus_stop") + "\n" + block("amenity", "bus_station")
-            else -> listOf(
-                block("amenity", "hospital"),
-                block("tourism", "attraction"),
-                block("amenity", "restaurant"),
-                block("amenity", "pharmacy"),
-                block("amenity", "school"),
-                block("amenity", "bank"),
-                block("leisure", "park")
-            ).joinToString("\n")
+            1 -> blocks("amenity" to "hospital", "amenity" to "clinic", "healthcare" to "hospital")
+            2 -> blocks("tourism" to "attraction", "tourism" to "museum", "tourism" to "viewpoint", "historic" to "monument")
+            3 -> blocks("amenity" to "restaurant", "amenity" to "fast_food", "amenity" to "cafe")
+            4 -> blocks("amenity" to "pharmacy", "healthcare" to "pharmacy", "shop" to "chemist")
+            5 -> blocks("amenity" to "school", "amenity" to "college", "amenity" to "university")
+            6 -> blocks("amenity" to "bank", "amenity" to "atm")
+            7 -> blocks("leisure" to "park", "leisure" to "garden")
+            8 -> blocks("highway" to "bus_stop", "amenity" to "bus_station")
+            else -> blocks(
+                "amenity" to "hospital", "tourism" to "attraction", "amenity" to "restaurant",
+                "amenity" to "pharmacy", "amenity" to "school", "amenity" to "bank", "leisure" to "park"
+            )
         }
 
         val overpassQuery = """
@@ -505,6 +505,13 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         val handler = Handler(Looper.getMainLooper())
         val centro = currentUserLocation
 
+        // Mensaje inmediato con el conteo (no esperar a la animación).
+        Toast.makeText(
+            this,
+            "Mostrando ${elements.size} ${filters[prefsManager.filterType].lowercase()} cerca.",
+            Toast.LENGTH_LONG
+        ).show()
+
         // 1) Círculo del radio, bien visible.
         if (centro != null) dibujarCirculoRadio(centro, color)
 
@@ -525,12 +532,14 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
                 marker.title = element.name
                 marker.snippet = "Tipo: ${element.type}"
                 marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                marker.icon = iconoMarcadorColoreado(color, 0.2f) // casi invisible al inicio
+                // IMPORTANTE: se crea a TAMAÑO COMPLETO para que SIEMPRE sea visible,
+                // aunque la animación de rebote no llegue a ejecutarse.
+                marker.icon = iconoMarcadorColoreado(color, 1.0f)
                 mapView.overlays.add(marker)
                 mapView.invalidate()
 
-                // Rebote amplio: 0.2x -> 1.3x -> 1.0x (se ve "saltar").
-                val escalas = floatArrayOf(0.2f, 0.6f, 1.0f, 1.3f, 1.15f, 1.0f)
+                // Rebote (extra visual): parte un poco pequeño y "salta".
+                val escalas = floatArrayOf(0.6f, 1.3f, 1.15f, 1.0f)
                 escalas.forEachIndexed { paso, scale ->
                     handler.postDelayed({
                         marker.icon = iconoMarcadorColoreado(color, scale)
@@ -540,14 +549,6 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
             }, inicio + 120L * index) // 120ms entre puntos -> goteo visible
         }
 
-        // Mensaje final con el conteo.
-        handler.postDelayed({
-            Toast.makeText(
-                this,
-                "Se encontraron ${elements.size} puntos de interés cerca.",
-                Toast.LENGTH_LONG
-            ).show()
-        }, inicio + 120L * elements.size + 300L)
     }
 
     /**
