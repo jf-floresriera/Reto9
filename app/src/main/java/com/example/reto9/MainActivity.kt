@@ -4,9 +4,15 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.drawable.Drawable
 import android.location.Location
 import android.location.LocationManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.DrawableCompat
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.AdapterView
@@ -145,8 +151,18 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 if (prefsManager.filterType != position) {
                     prefsManager.filterType = position
-                    if (currentUserLocation != null) {
-                        fetchPOIs(currentUserLocation!!)
+                    val centro = currentUserLocation
+                    if (centro != null) {
+                        // Pequeña animación de arranque: alejar y acercar para que el
+                        // cambio de categoría se note (mapa dinámico).
+                        mapView.controller.animateTo(centro)
+                        mapView.controller.zoomTo(14.0)
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            mapView.controller.zoomTo(15.0)
+                        }, 300L)
+                        fetchPOIs(centro)
+                    } else {
+                        getCurrentLocation()
                     }
                 }
             }
@@ -436,6 +452,80 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         ejecutarConsulta(overpassQuery, 0)
     }
 
+    /** Color del marcador según la categoría seleccionada (para que resalten y se distingan). */
+    private fun colorPorCategoria(): Int = when (prefsManager.filterType) {
+        1 -> Color.parseColor("#E53935") // Hospitales - rojo
+        2 -> Color.parseColor("#8E24AA") // Turístico - morado
+        3 -> Color.parseColor("#FB8C00") // Restaurantes - naranja
+        4 -> Color.parseColor("#43A047") // Farmacias - verde
+        5 -> Color.parseColor("#1E88E5") // Escuelas - azul
+        6 -> Color.parseColor("#00897B") // Bancos - teal
+        7 -> Color.parseColor("#7CB342") // Parques - verde claro
+        8 -> Color.parseColor("#6D4C41") // Buses - marrón
+        else -> Color.parseColor("#D81B60") // Todos - rosa
+    }
+
+    /** Crea el icono del pin teñido con [color] y escalado a [scale] (para la animación de crecer). */
+    private fun iconoMarcadorColoreado(color: Int, scale: Float): Drawable {
+        val base = ContextCompat.getDrawable(this, R.drawable.ic_poi_marker)!!.mutate()
+        val wrapped = DrawableCompat.wrap(base)
+        DrawableCompat.setTint(wrapped, color)
+        val w = (wrapped.intrinsicWidth * scale).toInt().coerceAtLeast(1)
+        val h = (wrapped.intrinsicHeight * scale).toInt().coerceAtLeast(1)
+        wrapped.setBounds(0, 0, w, h)
+        return wrapped
+    }
+
+    /**
+     * Dibuja los puntos de interés de forma DINÁMICA: aparecen uno a uno con un pequeño
+     * retraso (efecto escalonado) y cada pin "crece" con una mini animación. Al terminar,
+     * el mapa hace un zoom animado para encuadrar los resultados.
+     */
+    private fun mostrarPoisAnimados(elements: List<com.example.reto9.data.OverpassElement>) {
+        val color = colorPorCategoria()
+        val handler = Handler(Looper.getMainLooper())
+        val puntos = mutableListOf<GeoPoint>()
+
+        elements.forEachIndexed { index, element ->
+            // Cada marcador aparece con un pequeño retraso -> sensación de animación.
+            handler.postDelayed({
+                val punto = GeoPoint(element.latitude, element.longitude)
+                puntos.add(punto)
+
+                val marker = Marker(mapView)
+                marker.position = punto
+                marker.title = element.name
+                marker.snippet = "Tipo: ${element.type}"
+                marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                marker.icon = iconoMarcadorColoreado(color, 0.5f) // empieza pequeño
+                mapView.overlays.add(marker)
+                mapView.invalidate()
+
+                // Animación de "crecer": el pin pasa de 0.5x a 1.0x en ~180 ms.
+                val pasos = 6
+                for (p in 1..pasos) {
+                    handler.postDelayed({
+                        val scale = 0.5f + 0.5f * (p / pasos.toFloat())
+                        marker.icon = iconoMarcadorColoreado(color, scale)
+                        mapView.invalidate()
+                    }, 30L * p)
+                }
+            }, 40L * index)
+        }
+
+        // Al terminar de colocar todos, encuadrar la zona con zoom animado.
+        handler.postDelayed({
+            Toast.makeText(
+                this,
+                "Se encontraron ${elements.size} puntos de interés cerca.",
+                Toast.LENGTH_LONG
+            ).show()
+            currentUserLocation?.let {
+                mapView.controller.animateTo(it)
+            }
+        }, 40L * elements.size + 250L)
+    }
+
     /**
      * Ejecuta la consulta Overpass contra el servidor [serverIndex]. Si ese servidor
      * falla (timeout / sin conexión), REINTENTA automáticamente con el siguiente de la
@@ -456,24 +546,9 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
             override fun onResponse(call: Call<OverpassResponse>, response: Response<OverpassResponse>) {
                 if (response.isSuccessful && response.body() != null) {
                     val elements = response.body()!!.elements
+                        .filter { !(it.latitude == 0.0 && it.longitude == 0.0) }
                     if (elements.isNotEmpty()) {
-                        var contador = 0
-                        for (element in elements) {
-                            if (element.latitude == 0.0 && element.longitude == 0.0) continue
-                            val poiMarker = Marker(mapView)
-                            poiMarker.position = GeoPoint(element.latitude, element.longitude)
-                            poiMarker.title = element.name
-                            poiMarker.snippet = "Tipo: ${element.type}"
-                            poiMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                            mapView.overlays.add(poiMarker)
-                            contador++
-                        }
-                        mapView.invalidate()
-                        Toast.makeText(
-                            this@MainActivity,
-                            "Se encontraron $contador puntos de interés cerca.",
-                            Toast.LENGTH_LONG
-                        ).show()
+                        mostrarPoisAnimados(elements)
                     } else {
                         Toast.makeText(
                             this@MainActivity,
