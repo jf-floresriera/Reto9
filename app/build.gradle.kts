@@ -15,8 +15,8 @@ android {
         targetSdk = 35
         // Subir versionCode en CADA versión: si no, Android puede NO reinstalar la
         // actualización y te quedas viendo la app vieja (bug reportado por el usuario).
-        versionCode = 8
-        versionName = "1.8"
+        versionCode = 9
+        versionName = "1.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
