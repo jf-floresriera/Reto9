@@ -64,6 +64,12 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
     // Centro de Bogotá (Plaza de Bolívar), usado como respaldo si el GPS no responde.
     private val bogotaCenter = GeoPoint(4.5981, -74.0758)
 
+    // Resultados de la última búsqueda (para la lista de lugares).
+    private val resultadosPois = mutableListOf<PoiItem>()
+
+    // Dato simple de un punto de interés encontrado.
+    data class PoiItem(val nombre: String, val punto: GeoPoint)
+
     // Categorías de puntos de interés (útiles en una ciudad como Bogotá).
     private val filters = arrayOf(
         "Todos", "Hospitales", "Turístico", "Restaurantes", "Farmacias",
@@ -108,6 +114,8 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
 
         // Toolbar Material como barra de acciones (con menú).
         setSupportActionBar(findViewById<Toolbar>(R.id.toolbar))
+        // Mostrar la versión en el subtítulo para confirmar que se actualizó la app.
+        supportActionBar?.subtitle = "v${BuildConfig.VERSION_NAME}"
 
         // prefsManager ya se inicializó al principio de onCreate (para el tema).
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
@@ -505,10 +513,17 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
         val handler = Handler(Looper.getMainLooper())
         val centro = currentUserLocation
 
+        // Guardar los resultados para la lista de lugares.
+        resultadosPois.clear()
+        elements.forEach {
+            val nombre = if (it.name.isNotBlank() && it.name != "null") it.name else "(sin nombre)"
+            resultadosPois.add(PoiItem(nombre, GeoPoint(it.latitude, it.longitude)))
+        }
+
         // Mensaje inmediato con el conteo (no esperar a la animación).
         Toast.makeText(
             this,
-            "Mostrando ${elements.size} ${filters[prefsManager.filterType].lowercase()} cerca.",
+            "Mostrando ${elements.size} ${filters[prefsManager.filterType].lowercase()} cerca. Toca 🔍 Lista para verlas.",
             Toast.LENGTH_LONG
         ).show()
 
@@ -660,6 +675,35 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
     }
 
     /**
+     * Muestra la LISTA de lugares de interés encontrados en la última búsqueda.
+     * Al tocar un lugar, el mapa se centra en ese punto.
+     */
+    private fun mostrarListaResultados() {
+        if (resultadosPois.isEmpty()) {
+            Toast.makeText(
+                this,
+                "Aún no hay resultados. Pulsa 🔍 Buscar o elige una categoría primero.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+
+        val nombres = resultadosPois.map { it.nombre }.toTypedArray()
+        val categoria = filters[prefsManager.filterType]
+        AlertDialog.Builder(this)
+            .setTitle("$categoria encontrados: ${resultadosPois.size}")
+            .setItems(nombres) { _, which ->
+                // Al tocar un lugar de la lista, centrar el mapa ahí.
+                val item = resultadosPois[which]
+                mapView.controller.setZoom(17.0)
+                mapView.controller.animateTo(item.punto)
+                Toast.makeText(this, item.nombre, Toast.LENGTH_SHORT).show()
+            }
+            .setPositiveButton("Cerrar", null)
+            .show()
+    }
+
+    /**
      * Diálogo para elegir el tema (claro / oscuro / automático). Guarda la elección
      * y la aplica inmediatamente recreando la actividad.
      */
@@ -688,6 +732,7 @@ class MainActivity : AppCompatActivity(), MapEventsReceiver {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
+            R.id.action_list -> { mostrarListaResultados(); true }
             R.id.action_search -> {
                 if (currentUserLocation != null) fetchPOIs(currentUserLocation!!)
                 else getCurrentLocation()

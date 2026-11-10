@@ -3,6 +3,7 @@
 
     <!-- Toolbar / menú -->
     <string name="action_search">Buscar</string>
+    <string name="action_list">Lista de lugares</string>
     <string name="action_layers">Capas del mapa</string>
     <string name="action_download">Descargar área (offline)</string>
     <string name="action_draw">Dibujar</string>
